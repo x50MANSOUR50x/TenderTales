@@ -1,0 +1,48 @@
+# Environment & Secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+
+# Data & Cache (RAG / Web Scraping / Vector Stores)
+data/
+raw_data/
+vector_store/
+chroma_db/
+faiss_index/
+*.sqlite3
+*.db
+*.csv
+*.json
+
+# Generated Audio Files (TTS Output)
+/output/
+/audio/
+/media/
+*.mp3
+*.wav
+*.m4a
+
+# Machine Learning Checkpoints & Fine-Tuned Weights
+/models/
+/checkpoints/
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.onnx
+
+# IDE & OS Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -52,6 +52,10 @@ Every day, we are overwhelmed with information across social media, news portals
 🛠️ Project Structure
 Plaintext
 TrendTales-AI/
+├── Data preprocessing/
+│   ├── data_collection.py/       
+│   ├── preprocessing.py/          
+│   └── trend_ranking.py/
 ├── .gitignore
 ├── requirements.txt
 └── README.md

@@ -1,62 +1,59 @@
+import json
 import re
 
 
-def remove_duplicates(documents):
-    unique_documents = []
-    seen = set()
-
-    for document in documents:
-        key = (
-            document.get("title", "").strip().lower(),
-            document.get("content", "").strip().lower()
-        )
-
-        if key not in seen:
-            seen.add(key)
-            unique_documents.append(document)
-
-    return unique_documents
-
-
-def handle_missing_values(documents):
-    for document in documents:
-        document["title"] = document.get("title") or ""
-        document["content"] = document.get("content") or ""
-        document["date"] = document.get("date") or ""
-        document["source"] = document.get("source") or "unknown"
-
-    return documents
+def load_documents(filename="Data preprocessing/Data/sample_data.json"):
+    with open(filename, "r", encoding="utf-8") as file:
+        return json.load(file)
 
 
 def clean_text(text):
-    text = re.sub(r"https?://\S+|www\.\S+", "", text)
+    text = re.sub(r"http\S+|www\S+", "", text)
     text = re.sub(r"\s+", " ", text)
-    text = re.sub(r"[^\w\s.,!?'-]", "", text)
     return text.strip()
 
 
-def combine_title_content(documents):
-    for document in documents:
-        document["content"] = clean_text(
-            document["title"] + " " + document["content"]
-        )
-
-    return documents
-
-
 def preprocess_documents(documents):
-    documents = handle_missing_values(documents)
-    documents = remove_duplicates(documents)
-    documents = combine_title_content(documents)
+    cleaned_documents = []
+    seen = set()
 
-    return documents
+    for document in documents:
+        title = document.get("title") or ""
+        content = document.get("content") or ""
+
+        title = clean_text(title)
+        content = clean_text(content)
+
+        key = (title.lower(), content.lower())
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+
+        document["title"] = title
+        document["content"] = f"{title}. {content}".strip()
+
+        cleaned_documents.append(document)
+
+    return cleaned_documents
+
+def save_documents(documents, filename="Data preprocessing/Data/cleaned_data.json"):
+    with open(filename, "w", encoding="utf-8") as file:
+        json.dump(documents, file, ensure_ascii=False, indent=4)
+
+
+def main():
+    documents = load_documents()
+    cleaned_documents = preprocess_documents(documents)
+
+    print("Original documents:", len(documents))
+    print("Cleaned documents:", len(cleaned_documents))
+
+    save_documents(cleaned_documents)
+
+    print("Preprocessing completed successfully.")
 
 
 if __name__ == "__main__":
-    from data_collection import collect_sample_data
-
-    documents = collect_sample_data()
-    documents = preprocess_documents(documents)
-
-    for document in documents:
-        print(document)
+    main()

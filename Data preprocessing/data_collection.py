@@ -3,7 +3,7 @@ import os
 import json
 
 topic = "artificial intelligence OR machine learning OR generative ai OR openai OR anthropic OR nvidia OR chatgpt"
-# page_size = 20
+page_size = 20
 
 def create_document(id, source, title, content, date):
     return {
@@ -14,7 +14,7 @@ def create_document(id, source, title, content, date):
         "date": date
     }
 
-def collect_news(topic=topic, page_size=20):
+def collect_news(topic=topic, page_size=page_size):
     api_key = os.getenv("NEWS_API_KEY")
 
     url = "https://newsapi.org/v2/everything"

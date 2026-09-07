@@ -46,3 +46,6 @@ faiss_index/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Temporary Files
+playground.py

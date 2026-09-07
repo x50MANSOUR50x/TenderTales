@@ -48,5 +48,5 @@ faiss_index/
 Thumbs.db
 
 # Temporary Files
-playground.py
+news_test.py
 API_keys.txt

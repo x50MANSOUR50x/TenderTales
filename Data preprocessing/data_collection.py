@@ -43,7 +43,7 @@ def collect_news(topic=topic, page_size=page_size):
             id=f"news_{i+1:03d}",
             source=article["source"]["name"],
             title=article["title"],
-            content=article["content"],
+            content=article.get("content") or "",
             date=article["publishedAt"]
         )
 

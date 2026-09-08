@@ -1,198 +1,180 @@
-from sklearn.feature_extraction.text import TfidfVectorizer
-from collections import Counter
-from datetime import datetime, timezone
-import re
+# Trend Score = Frequency × Recency × Source Diversity
 
-STOP_WORDS = {
-    "a", "an", "the", "is", "are", "was", "were",
-    "has", "have", "had", "been", "be",
-    "in", "on", "at", "to", "of", "for", "from",
-    "and", "or", "but", "with", "as", "by",
-    "this", "that", "these", "those",
-    "it", "its", "they", "them", "their",
-    "he", "she", "we", "you", "i"
+import json
+import re
+import nltk
+from nltk.corpus import stopwords
+from collections import Counter
+from datetime import datetime
+
+nltk.download("stopwords")
+
+stop_words = set(stopwords.words("english"))
+
+news_stop_words = {
+    "said", "says", "reported", "reportedly", "according",
+    "reuters", "new", "nearly", "which", "could", "would",
+    "friday", "saturday", "sunday", "monday", "tuesday",
+    "wednesday", "thursday", "billion", "million",
+    "company", "companies", "offering", "plans"
 }
 
+stop_words.update(news_stop_words)
+
+
+def load_documents(filename="Data preprocessing/Data/cleaned_data.json"):
+    with open(filename, "r", encoding="utf-8") as file:
+        return json.load(file)
+
+def extract_words(text):
+    text = re.sub(r"\[\+\d+\s+chars\]", "", text)
+    words = re.findall(r"\b[a-zA-Z]{3,}\b", text.lower())
+
+    return [word for word in words if word not in stop_words]
+
+def extract_phrases(text):
+    words = extract_words(text)
+    phrases = []
+
+    for i in range(len(words) - 1):
+        word1 = words[i]
+        word2 = words[i + 1]
+
+        if len(word1) >= 4 and len(word2) >= 4:
+            phrases.append(f"{word1} {word2}")
+
+    return phrases
 
 def calculate_frequency(documents):
-    word_counts = Counter()
+    word_counter = Counter()
+    phrase_counter = Counter()
 
     for document in documents:
-        text = document["content"].lower()
-        words = re.findall(r"\b[a-zA-Z]+\b", text)
+        text = document["content"]
+
+        word_counter.update(extract_words(text))
+        phrase_counter.update(extract_phrases(text))
+
+    return word_counter, phrase_counter
+
+def calculate_recency(date):
+    article_date = datetime.fromisoformat(date.replace("Z", "+00:00"))
+    now = datetime.now(article_date.tzinfo)
+
+    hours = (now - article_date).total_seconds() / 3600
+
+    return 1 / (1 + hours)
+
+def calculate_source_diversity(documents):
+    word_sources = {}
+    phrase_sources = {}
+
+    for document in documents:
+        text = document["content"]
+        source = document["source"]
+
+        words = set(extract_words(text))
+        phrases = set(extract_phrases(text))
 
         for word in words:
-            if word not in STOP_WORDS:
-                word_counts[word] += 1
+            if word not in word_sources:
+                word_sources[word] = set()
+            word_sources[word].add(source)
 
-    return word_counts
+        for phrase in phrases:
+            if phrase not in phrase_sources:
+                phrase_sources[phrase] = set()
+            phrase_sources[phrase].add(source)
 
+    return word_sources, phrase_sources
 
-def calculate_recency(documents):
-    now = datetime.now(timezone.utc)
-    recency_scores = {}
+def calculate_trend_scores(documents):
+    word_counter, phrase_counter = calculate_frequency(documents)
+    word_sources, phrase_sources = calculate_source_diversity(documents)
 
-    for document in documents:
-        date = datetime.fromisoformat(document["date"]).replace(tzinfo=timezone.utc)
-        age_hours = max((now - date).total_seconds() / 3600, 0)
-        score = 1 / (1 + age_hours)
+    trends = []
 
-        recency_scores[document["id"]] = score
+    for word, frequency in word_counter.items():
+        source_diversity = len(word_sources[word])
 
-    return recency_scores
-
-
-def extract_keywords(documents, top_k=5):
-    texts = [document["content"] for document in documents]
-
-    vectorizer = TfidfVectorizer(
-        stop_words="english",
-        ngram_range=(1, 2)
-    )
-
-    matrix = vectorizer.fit_transform(texts)
-    features = vectorizer.get_feature_names_out()
-
-    keyword_scores = {}
-
-    for index in range(len(documents)):
-        scores = matrix[index].toarray().flatten()
-
-        for feature_index, score in enumerate(scores):
-            if score > 0:
-                keyword = features[feature_index]
-                keyword_scores[keyword] = keyword_scores.get(keyword, 0) + score
-
-    ranked_keywords = sorted(
-        keyword_scores.items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
-
-    return ranked_keywords[:top_k]
-
-
-def calculate_source_diversity(documents, keywords):
-    diversity = {}
-
-    for keyword, _ in keywords:
-        sources = set()
+        recency_scores = []
 
         for document in documents:
-            text = document["content"].lower()
+            if word in extract_words(document["content"]):
+                recency_scores.append(calculate_recency(document["date"]))
 
-            if keyword.lower() in text:
-                sources.add(document["source"])
+        recency = sum(recency_scores) / len(recency_scores)
 
-        diversity[keyword] = len(sources)
+        score = frequency * recency * source_diversity
 
-    return diversity
+        trends.append({
+            "trend": word,
+            "type": "word",
+            "frequency": frequency,
+            "recency": recency,
+            "source_diversity": source_diversity,
+            "score": score
+        })
 
+    for phrase, frequency in phrase_counter.items():
+        if frequency < 2:
+            continue
 
-def calculate_keyword_recency(documents, keywords, recency_scores):
-    keyword_recency = {}
+        source_diversity = len(phrase_sources[phrase])
 
-    for keyword, _ in keywords:
-        scores = []
+        recency_scores = []
 
         for document in documents:
-            if keyword.lower() in document["content"].lower():
-                scores.append(recency_scores[document["id"]])
+            if phrase in " ".join(extract_words(document["content"])):
+                recency_scores.append(calculate_recency(document["date"]))
 
-        if scores:
-            keyword_recency[keyword] = sum(scores) / len(scores)
-        else:
-            keyword_recency[keyword] = 0
+        if not recency_scores:
+            continue
 
-    return keyword_recency
+        recency = sum(recency_scores) / len(recency_scores)
 
+        score = frequency * recency * source_diversity
 
-def normalize_scores(scores):
-    max_score = max(scores.values())
+        trends.append({
+            "trend": phrase,
+            "type": "phrase",
+            "frequency": frequency,
+            "recency": recency,
+            "source_diversity": source_diversity,
+            "score": score
+        })
 
-    if max_score == 0:
-        return {key: 0 for key in scores}
+    trends.sort(key=lambda x: x["score"], reverse=True)
 
-    return {
-        key: value / max_score
-        for key, value in scores.items()
-    }
+    return trends
 
-def calculate_trend_scores(frequency, keyword_recency, source_diversity):
-    keyword_frequency = {
-        keyword: frequency.get(keyword, 0)
-        for keyword in source_diversity
-    }
+def save_top_trends(trends, filename="Data preprocessing/Data/top_trends.json", limit=10):
+    top_trends = trends[:limit]
 
-    normalized_frequency = normalize_scores(keyword_frequency)
-    normalized_recency = normalize_scores(keyword_recency)
-    normalized_diversity = normalize_scores(source_diversity)
+    with open(filename, "w", encoding="utf-8") as file:
+        json.dump(top_trends, file, ensure_ascii=False, indent=4)
 
-    trend_scores = {}
+def main():
+    documents = load_documents()
 
-    for keyword in source_diversity:
-        trend_scores[keyword] = (
-            normalized_frequency[keyword] * 0.4
-            + normalized_recency[keyword] * 0.3
-            + normalized_diversity[keyword] * 0.3
+    trends = calculate_trend_scores(documents)
+
+    print("Top Trends:")
+
+    for trend in trends[:10]:
+        print(
+            trend["trend"],
+            "| Type:", trend["type"],
+            "| Frequency:", trend["frequency"],
+            "| Sources:", trend["source_diversity"],
+            "| Score:", round(trend["score"], 4)
         )
 
-    return trend_scores
+    save_top_trends(trends)
 
-def get_top_trends(trend_scores, top_k=3):
-    ranked_trends = sorted(
-        trend_scores.items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
-
-    return ranked_trends[:top_k]
+    print("\nTop trends saved successfully.")
 
 
 
 if __name__ == "__main__":
-    from data_collection import collect_sample_data
-    from preprocessing import preprocess_documents
-
-    documents = collect_sample_data()
-    documents = preprocess_documents(documents)
-
-    frequency = calculate_frequency(documents)
-    recency = calculate_recency(documents)
-    keywords = extract_keywords(documents)
-    source_diversity = calculate_source_diversity(documents, keywords)
-
-    keyword_recency = calculate_keyword_recency(
-        documents,
-        keywords,
-        recency
-    )
-
-    trend_scores = calculate_trend_scores(
-        frequency,
-        keyword_recency,
-        source_diversity
-    )
-
-    top_trends = get_top_trends(trend_scores)
-
-    print("Frequency:")
-    print(frequency)
-
-    print("Recency:")
-    print(recency)
-
-    print("Keywords:")
-    print(keywords)
-
-    print("Source Diversity:")
-    print(source_diversity)
-
-    print("Keyword Recency:")
-    print(keyword_recency)
-
-    print("Trend Scores:")
-    print(trend_scores)
-
-    print("Top Trends:")
-    print(top_trends)
+    main()
